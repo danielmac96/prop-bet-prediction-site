@@ -1,0 +1,7 @@
+nflreadpy>=0.1.0
+pandas>=2.0.0
+numpy>=1.26.0
+supabase>=2.0.0
+python-dotenv>=1.0.0
+tabulate>=0.10.0
+pyarrow>=23.0.1
