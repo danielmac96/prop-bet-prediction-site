@@ -6,7 +6,7 @@ Edit SEASONS / CURRENT_WEEK here before any run.
 """
 
 # ── Seasons ────────────────────────────────────────────────────────────────────
-HISTORICAL_SEASONS = list(range(2016, 2025))   # backfill range
+HISTORICAL_SEASONS = [] #list(range(2025, 2025))   # backfill range
 CURRENT_SEASON     = 2025
 CURRENT_WEEK       = 1   # update each week
 
