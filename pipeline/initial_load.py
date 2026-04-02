@@ -21,7 +21,7 @@ import argparse
 import logging
 import sys
 
-from config import HISTORICAL_SEASONS, CURRENT_SEASON, TABLES
+from pipeline.config import HISTORICAL_SEASONS, CURRENT_SEASON, TABLES
 from utils.upload import upsert
 from utils.validation import validate
 
