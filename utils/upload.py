@@ -11,7 +11,7 @@ import pandas as pd
 from typing import List
 
 from db.client import supabase
-from config import BATCH_SIZE, MAX_RETRIES
+from pipeline.config import BATCH_SIZE, MAX_RETRIES
 
 logger = logging.getLogger(__name__)
 
