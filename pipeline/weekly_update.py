@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 _WEEKLY_FEEDS = [
     ("player_info",           "snapshot"),
     ("fantasy_ids",           "snapshot"),
-    ("depth_chart",           "snapshot"),
+    # ("depth_chart",           "snapshot"),
     ("fantasy_rankings",      "snapshot"),
     ("rosters",               "season"),
     ("schedule",              "season"),

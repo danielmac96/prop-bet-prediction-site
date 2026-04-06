@@ -87,14 +87,14 @@ def _load(feed_name: str, seasons: list[int]):
             return rosters_loader.load(seasons)
         case "fantasy_opportunities":
             return opps_loader.load(seasons)
+        case "nextgen":
+            return nextgen_loader.load(seasons)
 
         # ── Snapshot feeds (season param ignored) ────────────────────────────
         case "player_info":
             return player_info_loader.load()
         case "depth_chart":
             return depth_chart_loader.load()
-        case "nextgen":
-            return nextgen_loader.load()
         case "pfr_adv_stats":
             return pfr_loader.load()
         case "fantasy_ids":
@@ -112,7 +112,7 @@ def _load(feed_name: str, seasons: list[int]):
 _DEFAULT_ORDER = [
     "player_info",
     "fantasy_ids",
-    "depth_chart",
+    # "depth_chart",
     "rosters",
     "schedule",
     "weekly_player_stats",
