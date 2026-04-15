@@ -58,8 +58,8 @@ def load(seasons: list[int]) -> pd.DataFrame:
     raw = nfl.load_player_stats(seasons=seasons, summary_level="week").to_pandas()
 
     df = raw.copy()
-    df.drop(columns=[c for c in _DROP_COLS if c in df.columns], inplace=True)
     df = df[df["position_group"].isin(_POSITION_GROUPS)].copy()
+    df.drop(columns=[c for c in _DROP_COLS if c in df.columns], inplace=True)
 
     df["season"] = df["season"].astype(int)
     df["week"]   = df["week"].astype(int)
