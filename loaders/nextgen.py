@@ -26,8 +26,7 @@ _PASS_COLS = [
     ("week",                                    None),
     ("season_type",                             None),
     ("team_abbr",                               "team"),
-    ("player_display_name",                     None),
-    ("player_position",                         None),
+    # player_display_name and player_position excluded — available in player_info
     ("avg_time_to_throw",                       None),
     ("avg_completed_air_yards",                 None),
     ("avg_intended_air_yards",                  None),
@@ -53,8 +52,7 @@ _RUSH_COLS = [
     ("week",                                    None),
     ("season_type",                             None),
     ("team_abbr",                               "team"),
-    ("player_display_name",                     None),
-    ("player_position",                         None),
+    # player_display_name and player_position excluded — available in player_info
     ("efficiency",                              None),
     ("percent_attempts_gte_eight_defenders",    None),
     ("avg_time_to_los",                         None),
@@ -74,8 +72,7 @@ _REC_COLS = [
     ("week",                                    None),
     ("season_type",                             None),
     ("team_abbr",                               "team"),
-    ("player_display_name",                     None),
-    ("player_position",                         None),
+    # player_display_name and player_position excluded — available in player_info
     ("avg_cushion",                             None),
     ("avg_separation",                          None),
     ("avg_intended_air_yards",                  None),
@@ -91,8 +88,7 @@ _REC_COLS = [
 ]
 
 # Keys shared across all three tables — not prefixed
-_JOIN_KEYS = {"gsis_id", "season", "week", "season_type", "team",
-              "player_display_name", "player_position"}
+_JOIN_KEYS = {"gsis_id", "season", "week", "season_type", "team"}
 
 _STAT_CONFIGS = [
     ("passing",   _PASS_COLS, "ng_pass"),
@@ -136,10 +132,7 @@ def _load_one(seasons, stat_type: str, col_spec: list, prefix: str) -> pd.DataFr
 # ── public API ────────────────────────────────────────────────────────────────
 
 def load(seasons) -> pd.DataFrame:
-    merge_keys = [
-        "gsis_id", "season", "week", "season_type",
-        "team", "player_display_name", "player_position"
-    ]
+    merge_keys = ["gsis_id", "season", "week", "season_type", "team"]
 
     frames = [
         _load_one(seasons, stat_type, col_spec, prefix)

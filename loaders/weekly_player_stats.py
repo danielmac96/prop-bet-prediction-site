@@ -11,6 +11,7 @@ Excluded (noise / kicker-specific / redundant with other feeds):
   - special_teams_tds                   → rare, low signal
   - penalty/fumble recovery cols        → available in team feed
   - player_name, position               → use player_info feed instead
+  - player_display_name, position_group, headshot_url → static; join to player_info
 """
 
 import pandas as pd
@@ -20,6 +21,7 @@ _POSITION_GROUPS = {"DB", "DL", "LB", "QB", "RB", "TE", "WR"}
 
 _DROP_COLS = [
     "player_name", "position",
+    "player_display_name", "headshot_url", "position_group",  # static — join to player_info
     "passing_2pt_conversions", "rushing_2pt_conversions", "receiving_2pt_conversions",
     "special_teams_tds",
     "def_sack_yards", "def_interception_yards", "def_tds", "def_fumbles", "def_safeties",

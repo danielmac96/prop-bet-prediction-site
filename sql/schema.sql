@@ -8,6 +8,7 @@
 --   - Floats use DOUBLE PRECISION (matches pandas float64)
 --   - Each table has a composite UNIQUE constraint matching config.TABLES conflict cols
 --   - No foreign key constraints — enforce integrity in the pipeline layer
+--   - Player metadata (name, position) lives only in player_info; join on gsis_id
 -- =============================================================================
 
 
@@ -28,9 +29,7 @@ CREATE TABLE IF NOT EXISTS public.player_info (
     draft_pick              DOUBLE PRECISION,
     years_of_experience     BIGINT,
     pff_position            TEXT,
-    pfr_id                  TEXT,
-    pff_id                  DOUBLE PRECISION,
-    otc_id                  DOUBLE PRECISION
+    pfr_id                  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.depth_chart (
@@ -93,6 +92,8 @@ CREATE TABLE IF NOT EXISTS public.sched_final (
     UNIQUE (team, game_id)
 );
 
+-- Weekly roster snapshot. Physical attrs (height/weight) kept per-season as they
+-- change year over year. Static bio data lives in player_info.
 CREATE TABLE IF NOT EXISTS public.rosters (
     season              BIGINT,
     week                BIGINT,
@@ -101,27 +102,17 @@ CREATE TABLE IF NOT EXISTS public.rosters (
     team                TEXT,
     ros_position        TEXT,
     ros_depth_chart_pos TEXT,
-    jersey_number       DOUBLE PRECISION,
     ros_status          TEXT,
     ros_status_desc     TEXT,
-    years_exp           BIGINT,
-    entry_year          BIGINT,
-    rookie_year         BIGINT,
-    full_name           TEXT,
-    ros_birth_date      TEXT,
     ros_height          DOUBLE PRECISION,
     ros_weight          DOUBLE PRECISION,
-    espn_id             DOUBLE PRECISION,
-    sportradar_id       TEXT,
-    pfr_id              TEXT,
     UNIQUE (gsis_id, season, week)
 );
 
+-- Fact table: one row per player per game. No static player metadata —
+-- join to player_info on gsis_id for name / position / headshot.
 CREATE TABLE IF NOT EXISTS public.weekly_player_data (
     gsis_id                     TEXT,
-    player_display_name         TEXT,
-    position_group              TEXT,
-    headshot_url                TEXT,
     season                      BIGINT,
     week                        BIGINT,
     season_type                 TEXT,
@@ -347,69 +338,135 @@ CREATE TABLE IF NOT EXISTS public.play_by_play_formations (
     UNIQUE (gsis_id, game_id)
 );
 
+-- Next Gen Stats (AWS tracking). One row per player per week.
+-- Wide join across passing / rushing / receiving — most cells NULL per player.
+-- No player name/position — join to player_info on gsis_id.
 CREATE TABLE IF NOT EXISTS public.nextgen (
-    gsis_id                                 TEXT,
-    season                                  BIGINT,
-    week                                    BIGINT,
-    season_type                             TEXT,
-    team                                    TEXT,
-    ng_player_display_name                  TEXT,
-    ng_player_position                      TEXT,
-    ng_avg_time_to_throw                    DOUBLE PRECISION,
-    ng_avg_completed_air_yards              DOUBLE PRECISION,
-    ng_avg_intended_air_yards               DOUBLE PRECISION,
-    ng_avg_air_yards_differential           DOUBLE PRECISION,
-    ng_aggressiveness                       DOUBLE PRECISION,
-    ng_max_completed_air_distance           DOUBLE PRECISION,
-    ng_avg_air_yards_to_sticks              DOUBLE PRECISION,
-    ng_completion_percentage                DOUBLE PRECISION,
-    ng_expected_completion_percentage       DOUBLE PRECISION,
-    ng_completion_percentage_above_expectation DOUBLE PRECISION,
-    ng_avg_air_distance                     DOUBLE PRECISION,
-    ng_max_air_distance                     DOUBLE PRECISION,
-    ng_passer_rating                        DOUBLE PRECISION,
-    ng_attempts                             BIGINT,
-    ng_pass_yards                           BIGINT,
-    ng_pass_touchdowns                      BIGINT,
-    ng_interceptions                        BIGINT,
+    gsis_id                                         TEXT,
+    season                                          BIGINT,
+    week                                            BIGINT,
+    season_type                                     TEXT,
+    team                                            TEXT,
+    -- passing metrics (QBs)
+    ng_pass_avg_time_to_throw                       DOUBLE PRECISION,
+    ng_pass_avg_completed_air_yards                 DOUBLE PRECISION,
+    ng_pass_avg_intended_air_yards                  DOUBLE PRECISION,
+    ng_pass_avg_air_yards_differential              DOUBLE PRECISION,
+    ng_pass_aggressiveness                          DOUBLE PRECISION,
+    ng_pass_max_completed_air_distance              DOUBLE PRECISION,
+    ng_pass_avg_air_yards_to_sticks                 DOUBLE PRECISION,
+    ng_pass_completion_percentage                   DOUBLE PRECISION,
+    ng_pass_expected_completion_percentage          DOUBLE PRECISION,
+    ng_pass_completion_percentage_above_expectation DOUBLE PRECISION,
+    ng_pass_avg_air_distance                        DOUBLE PRECISION,
+    ng_pass_max_air_distance                        DOUBLE PRECISION,
+    ng_pass_passer_rating                           DOUBLE PRECISION,
+    ng_pass_attempts                                BIGINT,
+    ng_pass_pass_yards                              BIGINT,
+    ng_pass_pass_touchdowns                         BIGINT,
+    ng_pass_interceptions                           BIGINT,
+    -- rushing metrics (all ball carriers)
+    ng_rush_efficiency                              DOUBLE PRECISION,
+    ng_rush_percent_attempts_gte_eight_defenders    DOUBLE PRECISION,
+    ng_rush_avg_time_to_los                         DOUBLE PRECISION,
+    ng_rush_rush_attempts                           BIGINT,
+    ng_rush_rush_yards                              BIGINT,
+    ng_rush_avg_rush_yards                          DOUBLE PRECISION,
+    ng_rush_rush_touchdowns                         BIGINT,
+    ng_rush_expected_rush_yards                     DOUBLE PRECISION,
+    ng_rush_rush_yards_over_expected                DOUBLE PRECISION,
+    ng_rush_rush_yards_over_expected_per_att        DOUBLE PRECISION,
+    ng_rush_rush_pct_over_expected                  DOUBLE PRECISION,
+    -- receiving metrics (all targets)
+    ng_rec_avg_cushion                              DOUBLE PRECISION,
+    ng_rec_avg_separation                           DOUBLE PRECISION,
+    ng_rec_avg_intended_air_yards                   DOUBLE PRECISION,
+    ng_rec_percent_share_of_intended_air_yards      DOUBLE PRECISION,
+    ng_rec_receptions                               BIGINT,
+    ng_rec_targets                                  BIGINT,
+    ng_rec_catch_percentage                         DOUBLE PRECISION,
+    ng_rec_rec_yards                                BIGINT,
+    ng_rec_rec_touchdowns                           BIGINT,
+    ng_rec_avg_yac                                  DOUBLE PRECISION,
+    ng_rec_avg_expected_yac                         DOUBLE PRECISION,
+    ng_rec_avg_yac_above_expectation                DOUBLE PRECISION,
     UNIQUE (gsis_id, season, week)
 );
 
+-- PFR advanced stats. One row per pfr_player_id per game.
+-- Wide join across four role-specific frames — most cells NULL per player.
+-- Join to fantasy_football_ids on pfr_player_id to get gsis_id.
 CREATE TABLE IF NOT EXISTS public.pro_football_ref_adv_stats (
-    game_id                     TEXT,
-    season                      BIGINT,
-    week                        BIGINT,
-    game_type                   TEXT,
-    team                        TEXT,
-    opponent                    TEXT,
-    pfr_player_id               TEXT,
-    pfr_player_name             TEXT,
-    pfr_passing_drops           DOUBLE PRECISION,
-    pfr_passing_drop_pct        DOUBLE PRECISION,
-    pfr_receiving_drop          DOUBLE PRECISION,
-    pfr_receiving_drop_pct      DOUBLE PRECISION,
-    pfr_passing_bad_throws      DOUBLE PRECISION,
-    pfr_passing_bad_throw_pct   DOUBLE PRECISION,
-    pfr_times_sacked            DOUBLE PRECISION,
-    pfr_times_blitzed           DOUBLE PRECISION,
-    pfr_times_hurried           DOUBLE PRECISION,
-    pfr_times_hit               DOUBLE PRECISION,
-    pfr_times_pressured         DOUBLE PRECISION,
-    pfr_times_pressured_pct     DOUBLE PRECISION,
-    pfr_def_times_blitzed       DOUBLE PRECISION,
-    pfr_def_times_hurried       DOUBLE PRECISION,
-    pfr_def_times_hitqb         DOUBLE PRECISION,
+    game_id                         TEXT,
+    pfr_game_id                     TEXT,
+    season                          BIGINT,
+    week                            BIGINT,
+    game_type                       TEXT,
+    team                            TEXT,
+    opponent                        TEXT,
+    pfr_player_id                   TEXT,
+    pfr_player_name                 TEXT,
+    -- QB accuracy / decision-making (pfr_pass frame)
+    pfr_pass_drops                  DOUBLE PRECISION,
+    pfr_pass_drop_pct               DOUBLE PRECISION,
+    pfr_pass_bad_throws             DOUBLE PRECISION,
+    pfr_pass_bad_throw_pct          DOUBLE PRECISION,
+    -- pressure absorbed by QB
+    pfr_pass_times_sacked           DOUBLE PRECISION,
+    pfr_pass_times_blitzed          DOUBLE PRECISION,
+    pfr_pass_times_hurried          DOUBLE PRECISION,
+    pfr_pass_times_hit              DOUBLE PRECISION,
+    pfr_pass_times_pressured        DOUBLE PRECISION,
+    pfr_pass_times_pressured_pct    DOUBLE PRECISION,
+    -- defensive pressure generated (same play, defender perspective)
+    pfr_pass_def_blitzed            DOUBLE PRECISION,
+    pfr_pass_def_hurried            DOUBLE PRECISION,
+    pfr_pass_def_hitqb              DOUBLE PRECISION,
+    -- rushing (pfr_rush frame)
+    pfr_rush_carries                DOUBLE PRECISION,
+    pfr_rush_ybc                    DOUBLE PRECISION,
+    pfr_rush_ybc_avg                DOUBLE PRECISION,
+    pfr_rush_yac                    DOUBLE PRECISION,
+    pfr_rush_yac_avg                DOUBLE PRECISION,
+    pfr_rush_broken_tackles         DOUBLE PRECISION,
+    -- receiving (pfr_rec frame)
+    pfr_rec_broken_tackles          DOUBLE PRECISION,
+    pfr_rec_drops                   DOUBLE PRECISION,
+    pfr_rec_drop_pct                DOUBLE PRECISION,
+    pfr_rec_ints                    DOUBLE PRECISION,
+    pfr_rec_passer_rating           DOUBLE PRECISION,
+    -- coverage / pass rush / tackling (pfr_def frame)
+    pfr_def_ints                    DOUBLE PRECISION,
+    pfr_def_targets                 DOUBLE PRECISION,
+    pfr_def_completions_allowed     DOUBLE PRECISION,
+    pfr_def_completion_pct          DOUBLE PRECISION,
+    pfr_def_yards_allowed           DOUBLE PRECISION,
+    pfr_def_yards_per_cmp           DOUBLE PRECISION,
+    pfr_def_yards_per_tgt           DOUBLE PRECISION,
+    pfr_def_tds_allowed             DOUBLE PRECISION,
+    pfr_def_passer_rating           DOUBLE PRECISION,
+    pfr_def_adot                    DOUBLE PRECISION,
+    pfr_def_air_yards_completed     DOUBLE PRECISION,
+    pfr_def_yac                     DOUBLE PRECISION,
+    pfr_def_times_blitzed           DOUBLE PRECISION,
+    pfr_def_times_hurried           DOUBLE PRECISION,
+    pfr_def_times_hitqb             DOUBLE PRECISION,
+    pfr_def_sacks                   DOUBLE PRECISION,
+    pfr_def_pressures               DOUBLE PRECISION,
+    pfr_def_tackles_combined        DOUBLE PRECISION,
+    pfr_def_missed_tackles          DOUBLE PRECISION,
+    pfr_def_missed_tackle_pct       DOUBLE PRECISION,
     UNIQUE (pfr_player_id, game_id)
 );
 
+-- Fantasy opportunity model. One row per player per game.
+-- Player name/position excluded — join to player_info on gsis_id.
 CREATE TABLE IF NOT EXISTS public.fantasy_football_opportunities (
     gsis_id                         TEXT,
     game_id                         TEXT,
     season                          BIGINT,
     week                            DOUBLE PRECISION,
     team                            TEXT,
-    full_name                       TEXT,
-    position                        TEXT,
     opps_pass_attempt               DOUBLE PRECISION,
     opps_rec_attempt                DOUBLE PRECISION,
     opps_rush_attempt               DOUBLE PRECISION,

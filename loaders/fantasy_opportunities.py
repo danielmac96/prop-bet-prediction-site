@@ -18,12 +18,13 @@ Included:
 
 Excluded:
   - Team-level opportunity columns (use weekly_team_stats for team totals)
+  - full_name, position (static — join to player_info on gsis_id)
 """
 
 import pandas as pd
 import nflreadpy as nfl
 
-_ID_COLS     = ["gsis_id", "game_id", "season", "week", "team", "full_name", "position"]
+_ID_COLS     = ["gsis_id", "game_id", "season", "week", "team"]
 _RENAME_IGNORE = set(_ID_COLS)
 
 

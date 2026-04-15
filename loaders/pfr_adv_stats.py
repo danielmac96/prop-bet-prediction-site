@@ -3,10 +3,16 @@ loaders/pfr_adv_stats.py
 =========================
 Source: nflreadpy.load_pfr_advstats()
 
-pass  — drops, bad throws, pressure absorbed (QB-centric)
-rush  — yards before/after contact, broken tackles
-rec   — drops, broken tackles, int, passer rating when targeted
-def   — coverage metrics, pass rush contributions, tackling
+Advanced stats from Pro Football Reference. One row per pfr_player_id per game.
+Wide join across four role-specific frames; most cells are NULL for any given player.
+
+Column prefixes by frame:
+  pfr_pass_* — QB accuracy, bad throws, pressure absorbed
+  pfr_rush_* — yards before/after contact, broken tackles
+  pfr_rec_*  — receiver drops, broken tackles, int, passer rating when targeted
+  pfr_def_*  — coverage metrics, pass rush, tackling
+
+Note: all cross-system joins go through fantasy_football_ids (pfr_id → gsis_id).
 """
 
 import pandas as pd
@@ -18,49 +24,49 @@ _JOIN_KEYS = {
 }
 
 _PASS_COLS = [
-    ("game_id",                  None),
-    ("pfr_game_id",              None),
-    ("season",                   None),
-    ("week",                     None),
-    ("game_type",                None),
-    ("team",                     None),
-    ("opponent",                 None),
-    ("pfr_player_name",          None),
-    ("pfr_player_id",            None),
-    ("passing_drops",            None),
-    ("passing_drop_pct",         None),
-    ("receiving_drop",           None),   # targets thrown into drops
-    ("receiving_drop_pct",       None),
-    ("passing_bad_throws",       None),
-    ("passing_bad_throw_pct",    None),
-    ("times_sacked",             None),
-    ("times_blitzed",            None),
-    ("times_hurried",            None),
-    ("times_hit",                None),
-    ("times_pressured",          None),
-    ("times_pressured_pct",      None),
-    ("def_times_blitzed",        None),
-    ("def_times_hurried",        None),
-    ("def_times_hitqb",          None),
+    ("game_id",               None),
+    ("pfr_game_id",           None),
+    ("season",                None),
+    ("week",                  None),
+    ("game_type",             None),
+    ("team",                  None),
+    ("opponent",              None),
+    ("pfr_player_name",       None),
+    ("pfr_player_id",         None),
+    # QB accuracy / decision-making
+    ("passing_drops",         "pfr_pass_drops"),
+    ("passing_drop_pct",      "pfr_pass_drop_pct"),
+    ("passing_bad_throws",    "pfr_pass_bad_throws"),
+    ("passing_bad_throw_pct", "pfr_pass_bad_throw_pct"),
+    # pressure absorbed by QB
+    ("times_sacked",          "pfr_pass_times_sacked"),
+    ("times_blitzed",         "pfr_pass_times_blitzed"),
+    ("times_hurried",         "pfr_pass_times_hurried"),
+    ("times_hit",             "pfr_pass_times_hit"),
+    ("times_pressured",       "pfr_pass_times_pressured"),
+    ("times_pressured_pct",   "pfr_pass_times_pressured_pct"),
+    # defensive pressure generated (same play, defender perspective)
+    ("def_times_blitzed",     "pfr_pass_def_blitzed"),
+    ("def_times_hurried",     "pfr_pass_def_hurried"),
+    ("def_times_hitqb",       "pfr_pass_def_hitqb"),
 ]
 
 _RUSH_COLS = [
-    ("game_id",                           None),
-    ("pfr_game_id",                       None),
-    ("season",                            None),
-    ("week",                              None),
-    ("game_type",                         None),
-    ("team",                              None),
-    ("opponent",                          None),
-    ("pfr_player_name",                   None),
-    ("pfr_player_id",                     None),
-    ("carries",                           None),
-    ("rushing_yards_before_contact",      None),
-    ("rushing_yards_before_contact_avg",  None),
-    ("rushing_yards_after_contact",       None),
-    ("rushing_yards_after_contact_avg",   None),
-    ("rushing_broken_tackles",            None),
-    ("receiving_broken_tackles",          None),
+    ("game_id",                             None),
+    ("pfr_game_id",                         None),
+    ("season",                              None),
+    ("week",                                None),
+    ("game_type",                           None),
+    ("team",                                None),
+    ("opponent",                            None),
+    ("pfr_player_name",                     None),
+    ("pfr_player_id",                       None),
+    ("carries",                             "pfr_rush_carries"),
+    ("rushing_yards_before_contact",        "pfr_rush_ybc"),
+    ("rushing_yards_before_contact_avg",    "pfr_rush_ybc_avg"),
+    ("rushing_yards_after_contact",         "pfr_rush_yac"),
+    ("rushing_yards_after_contact_avg",     "pfr_rush_yac_avg"),
+    ("rushing_broken_tackles",              "pfr_rush_broken_tackles"),
 ]
 
 _REC_COLS = [
@@ -73,14 +79,11 @@ _REC_COLS = [
     ("opponent",                 None),
     ("pfr_player_name",          None),
     ("pfr_player_id",            None),
-    ("rushing_broken_tackles",   None),
-    ("receiving_broken_tackles", None),
-    ("passing_drops",            None),
-    ("passing_drop_pct",         None),
-    ("receiving_drop",           None),
-    ("receiving_drop_pct",       None),
-    ("receiving_int",            None),
-    ("receiving_rat",            None),   # passer rating when targeted
+    ("receiving_broken_tackles", "pfr_rec_broken_tackles"),
+    ("receiving_drop",           "pfr_rec_drops"),
+    ("receiving_drop_pct",       "pfr_rec_drop_pct"),
+    ("receiving_int",            "pfr_rec_ints"),
+    ("receiving_rat",            "pfr_rec_passer_rating"),
 ]
 
 _DEF_COLS = [
@@ -93,26 +96,29 @@ _DEF_COLS = [
     ("opponent",                   None),
     ("pfr_player_name",            None),
     ("pfr_player_id",              None),
-    ("def_ints",                   None),
-    ("def_targets",                None),
-    ("def_completions_allowed",    None),
-    ("def_completion_pct",         None),
-    ("def_yards_allowed",          None),
-    ("def_yards_allowed_per_cmp",  None),
-    ("def_yards_allowed_per_tgt",  None),
-    ("def_receiving_td_allowed",   None),
-    ("def_passer_rating_allowed",  None),
-    ("def_adot",                   None),
-    ("def_air_yards_completed",    None),
-    ("def_yards_after_catch",      None),
-    ("def_times_blitzed",          None),
-    ("def_times_hurried",          None),
-    ("def_times_hitqb",            None),
-    ("def_sacks",                  None),
-    ("def_pressures",              None),
-    ("def_tackles_combined",       None),
-    ("def_missed_tackles",         None),
-    ("def_missed_tackle_pct",      None),
+    # coverage
+    ("def_ints",                   "pfr_def_ints"),
+    ("def_targets",                "pfr_def_targets"),
+    ("def_completions_allowed",    "pfr_def_completions_allowed"),
+    ("def_completion_pct",         "pfr_def_completion_pct"),
+    ("def_yards_allowed",          "pfr_def_yards_allowed"),
+    ("def_yards_allowed_per_cmp",  "pfr_def_yards_per_cmp"),
+    ("def_yards_allowed_per_tgt",  "pfr_def_yards_per_tgt"),
+    ("def_receiving_td_allowed",   "pfr_def_tds_allowed"),
+    ("def_passer_rating_allowed",  "pfr_def_passer_rating"),
+    ("def_adot",                   "pfr_def_adot"),
+    ("def_air_yards_completed",    "pfr_def_air_yards_completed"),
+    ("def_yards_after_catch",      "pfr_def_yac"),
+    # pass rush
+    ("def_times_blitzed",          "pfr_def_times_blitzed"),
+    ("def_times_hurried",          "pfr_def_times_hurried"),
+    ("def_times_hitqb",            "pfr_def_times_hitqb"),
+    ("def_sacks",                  "pfr_def_sacks"),
+    ("def_pressures",              "pfr_def_pressures"),
+    # tackling
+    ("def_tackles_combined",       "pfr_def_tackles_combined"),
+    ("def_missed_tackles",         "pfr_def_missed_tackles"),
+    ("def_missed_tackle_pct",      "pfr_def_missed_tackle_pct"),
 ]
 
 _STAT_CONFIGS = [
@@ -143,6 +149,7 @@ def _load_one(seasons, stat_type: str, col_spec: list, prefix: str) -> pd.DataFr
     df["season"] = df["season"].astype(int)
     df["week"]   = df["week"].astype(int)
 
+    # Auto-prefix any remaining metric cols that weren't given explicit pfr_* aliases
     df.rename(columns={
         col: f"{prefix}_{col}"
         for col in df.columns
@@ -154,7 +161,7 @@ def _load_one(seasons, stat_type: str, col_spec: list, prefix: str) -> pd.DataFr
 
 def load(seasons=None) -> pd.DataFrame:
     """
-    Grain   : pfr_player_id × game_id × week
+    Grain   : pfr_player_id × game_id
     Columns : join keys (bare) + pfr_pass_* / pfr_rush_* / pfr_rec_* / pfr_def_*
     """
     merge_keys = [

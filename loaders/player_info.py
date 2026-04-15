@@ -15,7 +15,7 @@ Included:
 Excluded:
   - birth_date (PII-adjacent, not used in models)
   - esb_id, nfl_id, espn_id, smart_id (bridging handled by fantasy_ids table)
-  - pff_id, otc_id (rarely populated)
+  - pff_id, otc_id (rarely populated; cross-system bridging in fantasy_ids)
 """
 
 import pandas as pd
@@ -27,7 +27,7 @@ _KEEP_COLS = [
     "college_name", "college_conference",
     "rookie_season", "draft_round", "draft_pick",
     "years_of_experience", "pff_position",
-    "pfr_id", "pff_id", "otc_id",
+    "pfr_id",
 ]
 
 

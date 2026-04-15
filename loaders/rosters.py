@@ -8,13 +8,14 @@ Weekly roster snapshots. One row per player per week.
 Included:
   - Roster status / status description (active, IR, practice squad, etc.)
   - Position + depth chart position
-  - Physical attributes (height/weight as of that season)
-  - pfr_id for cross-joining to snap_counts and pfr_adv_stats
+  - Physical attributes (height/weight as of that season — can change year over year)
 
 Excluded:
+  - full_name (available in player_info)
   - birth_date (PII-adjacent)
   - jersey_number (cosmetic)
   - espn_id, sportradar_id (bridging handled by fantasy_ids table)
+  - pfr_id (available in player_info and fantasy_ids)
   - years_exp, entry_year, rookie_year (available in player_info)
 """
 
@@ -25,11 +26,7 @@ _KEEP_COLS = [
     "season", "week", "game_type", "gsis_id", "team",
     "position", "depth_chart_position",
     "status", "status_description_abbr",
-    "full_name", "height", "weight",
-    "jersey_number", "years_exp", "entry_year", "rookie_year",
-    "ros_birth_date",
-    "espn_id", "sportradar_id",
-    "pfr_id",
+    "height", "weight",
 ]
 
 
