@@ -15,7 +15,7 @@ import nflreadpy as nfl
 
 _KEEP_COLS = [
     "game_id", "season", "week", "game_type",
-    "pfr_player_id", "player", "position", "team",
+    "pfr_player_id", "team",
     "offense_snaps", "offense_pct",
     "defense_snaps", "defense_pct",
     "st_snaps", "st_pct",
@@ -39,7 +39,5 @@ def load(seasons: list[int] | None = None) -> pd.DataFrame:
     df = raw[[c for c in _KEEP_COLS if c in raw.columns]].copy()
     df["season"] = df["season"].astype(int)
     df["week"]   = df["week"].astype(int)
-
-    df.rename(columns={"player": "snap_player_name", "position": "snap_position"}, inplace=True)
 
     return df

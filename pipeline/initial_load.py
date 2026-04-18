@@ -120,8 +120,8 @@ _DEFAULT_ORDER = [
     "snap_counts",
     "pfr_adv_stats",
     "nextgen",
-    "fantasy_opportunities",
-    "fantasy_rankings",
+    # "fantasy_opportunities",
+    # "fantasy_rankings",
     "play_by_play",
     "formations",
 ]

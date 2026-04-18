@@ -19,14 +19,14 @@ import nflreadpy as nfl
 _KEEP_COLS = ["gsis_id", "team", "pos_abb", "pos_slot", "pos_rank", "pos_name", "pos_grp"]
 
 
-def load() -> pd.DataFrame:
+def load(seasons:list) -> pd.DataFrame:
     """
     Load the latest depth chart snapshot.
 
     Returns:
         DataFrame with one row per player at their primary depth chart position.
     """
-    raw = nfl.load_depth_charts().to_pandas()
+    raw = nfl.load_depth_charts(seasons=[2025]).to_pandas()
     raw["dt"] = pd.to_datetime(raw["dt"], errors="coerce")
 
     # Keep only the most recent date

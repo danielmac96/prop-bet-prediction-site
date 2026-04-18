@@ -42,6 +42,8 @@ _DROP_COLS = [
     "fantasy_points", "fantasy_points_ppr",
     "def_tackles_for_loss_yards", "def_fumbles_forced",
     "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
+    "def_tackles", "def_tackles_solo", "def_tackles_assist",
+    "receiving_yards_after_catch",
 ]
 
 

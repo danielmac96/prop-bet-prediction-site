@@ -24,9 +24,8 @@ import nflreadpy as nfl
 
 _KEEP_COLS = [
     "season", "week", "game_type", "gsis_id", "team",
-    "position", "depth_chart_position",
+    "position",
     "status", "status_description_abbr",
-    "height", "weight",
 ]
 
 
@@ -53,11 +52,8 @@ def load(seasons: list[int]) -> pd.DataFrame:
 
     df.rename(columns={
         "position":               "ros_position",
-        "depth_chart_position":   "ros_depth_chart_pos",
         "status":                 "ros_status",
         "status_description_abbr":"ros_status_desc",
-        "height":                 "ros_height",
-        "weight":                 "ros_weight",
     }, inplace=True)
 
     # Keep latest entry per player per week in case of mid-week moves

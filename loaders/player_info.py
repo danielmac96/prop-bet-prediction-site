@@ -22,12 +22,10 @@ import pandas as pd
 import nflreadpy as nfl
 
 _KEEP_COLS = [
-    "gsis_id", "display_name", "position_group", "ngs_position_group",
+    "gsis_id", "display_name", "position_group",
     "ngs_position", "height", "weight",
-    "college_name", "college_conference",
     "rookie_season", "draft_round", "draft_pick",
     "years_of_experience", "pff_position",
-    "pfr_id",
 ]
 
 

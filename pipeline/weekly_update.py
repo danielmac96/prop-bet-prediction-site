@@ -62,7 +62,7 @@ _WEEKLY_FEEDS = [
     ("player_info",           "snapshot"),
     ("fantasy_ids",           "snapshot"),
     # ("depth_chart",           "snapshot"),
-    ("fantasy_rankings",      "snapshot"),
+    # ("fantasy_rankings",      "snapshot"),
     ("rosters",               "season"),
     ("schedule",              "season"),
     ("weekly_player_stats",   "season"),
@@ -70,7 +70,7 @@ _WEEKLY_FEEDS = [
     ("snap_counts",           "season"),
     ("pfr_adv_stats",         "snapshot"),  # load_pfr_advstats has no season filter
     ("nextgen",               "snapshot"),  # same
-    ("fantasy_opportunities", "season"),
+    # ("fantasy_opportunities", "season"),
     ("play_by_play",          "season"),    # heaviest — run last
     ("formations",            "season"),
 ]

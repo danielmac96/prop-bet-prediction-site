@@ -28,17 +28,18 @@ _ID_COLS     = ["gsis_id", "game_id", "season", "week", "team"]
 _RENAME_IGNORE = set(_ID_COLS)
 
 
-def load(seasons: list[int] | None = None) -> pd.DataFrame:
+def load(seasons: list[int]) -> pd.DataFrame:
     """
     Load fantasy opportunity data.
 
     Args:
+        stat_type:
         seasons: Optional list of seasons to filter. If None, loads all available.
 
     Returns:
         DataFrame with one row per player per game, stat cols prefixed with 'opps_'.
     """
-    raw = nfl.load_ff_opportunity().to_pandas()
+    raw = nfl.load_ff_opportunity(seasons, "weekly").to_pandas()
     raw.rename(columns={"player_id": "gsis_id", "posteam": "team"}, inplace=True)
 
     if seasons:

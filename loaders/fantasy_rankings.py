@@ -44,7 +44,7 @@ def load() -> pd.DataFrame:
     Returns:
         DataFrame with one row per player/pos/team/page_type, stat cols prefixed with 'rank_'.
     """
-    raw = nfl.load_ff_rankings().to_pandas()
+    raw = nfl.load_ff_rankings(type="week").to_pandas()
     raw["scrape_date"] = pd.to_datetime(raw["scrape_date"], errors="coerce")
 
     # Keep only the latest scrape per unique player+context

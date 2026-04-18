@@ -13,6 +13,15 @@ Excluded:
 import pandas as pd
 import nflreadpy as nfl
 
+# Columns that duplicate player-level sums already in weekly_player_stats
+_DROP_COLS = [
+    "passing_yards", "passing_tds", "interceptions",
+    "rushing_yards", "rushing_tds",
+    "receiving_yards", "receiving_tds", "receptions", "targets",
+    "rushing_fumbles", "rushing_fumbles_lost",
+    "receiving_fumbles", "receiving_fumbles_lost",
+]
+
 # Pattern fragments that identify granular kicking breakdown columns to drop
 _KICKING_PATTERNS = [
     "fg_made_0", "fg_made_2", "fg_made_3", "fg_made_4", "fg_made_5", "fg_made_6",
@@ -40,6 +49,7 @@ def load(seasons: list[int]) -> pd.DataFrame:
         c for c in df.columns
         if any(pattern in c for pattern in _KICKING_PATTERNS)
     ]
+    drop_cols += [c for c in _DROP_COLS if c in df.columns]
     df.drop(columns=drop_cols, inplace=True)
 
     df["season"] = df["season"].astype(int)

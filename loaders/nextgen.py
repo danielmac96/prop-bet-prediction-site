@@ -38,12 +38,6 @@ _PASS_COLS = [
     ("expected_completion_percentage",          None),
     ("completion_percentage_above_expectation", None),
     ("avg_air_distance",                        None),
-    ("max_air_distance",                        None),
-    ("passer_rating",                           None),
-    ("attempts",                                None),
-    ("pass_yards",                              None),
-    ("pass_touchdowns",                         None),
-    ("interceptions",                           None),
 ]
 
 _RUSH_COLS = [
@@ -56,10 +50,7 @@ _RUSH_COLS = [
     ("efficiency",                              None),
     ("percent_attempts_gte_eight_defenders",    None),
     ("avg_time_to_los",                         None),
-    ("rush_attempts",                           None),
-    ("rush_yards",                              None),
     ("avg_rush_yards",                          None),
-    ("rush_touchdowns",                         None),
     ("expected_rush_yards",                     None),
     ("rush_yards_over_expected",                None),
     ("rush_yards_over_expected_per_att",        None),
@@ -77,11 +68,7 @@ _REC_COLS = [
     ("avg_separation",                          None),
     ("avg_intended_air_yards",                  None),
     ("percent_share_of_intended_air_yards",     None),
-    ("receptions",                              None),
-    ("targets",                                 None),
     ("catch_percentage",                        None),
-    ("yards",                                   "rec_yards"),   # disambiguate from rush/pass yards
-    ("rec_touchdowns",                          None),
     ("avg_yac",                                 None),
     ("avg_expected_yac",                        None),
     ("avg_yac_above_expectation",               None),

@@ -15,13 +15,13 @@ import nflreadpy as nfl
 
 # Columns kept from the raw game-level schedule
 _GAME_CONTEXT_COLS = [
-    "game_id", "pfr", "espn", "old_game_id",
+    "game_id",
     "season", "game_type", "week", "gameday", "gametime",
     "location", "result", "total",
     "spread_line", "total_line",
     "away_moneyline", "home_moneyline",
     "div_game", "roof", "surface", "temp", "wind",
-    "referee", "stadium_id", "stadium",
+    "stadium",
 ]
 
 
