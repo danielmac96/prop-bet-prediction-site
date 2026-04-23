@@ -1,364 +1,328 @@
 # CLAUDE.md — prop-bet-prediction-site
 
-AI assistant guide for the NFL data pipeline. Read this before making any changes.
+Developer reference for the NFL data pipeline. Covers what each data script does, how the datasets relate, and how to debug before pushing to Supabase.
 
 ---
 
-## Project Overview
+## What This Is
 
-Production-grade NFL data pipeline that fetches weekly player/team statistics and loads them into Supabase (PostgreSQL). The data feeds a sportsbook prop-bet prediction model.
+A Python ETL pipeline. It pulls NFL data via `nflreadpy`, transforms it in `loaders/`, validates it, and upserts to Supabase (PostgreSQL). No web server, no API — pure data pipeline with two entry points:
 
-**Core flow:**
-1. Pull raw NFL data via `nflreadpy` library
-2. Transform/clean in loader modules (`loaders/`)
-3. Validate per-table rules (`utils/validation.py`)
-4. Upsert to Supabase in batches (`utils/upload.py`)
-
-There is **no web server, no API, no frontend**. This is a pure data pipeline with two entry points: a one-time historical backfill and a weekly cron job.
+- `python -m pipeline.initial_load` — one-time historical backfill (2016 → present, ~30–45 min)
+- `python -m pipeline.weekly_update` — weekly cron job (Tuesdays after games)
 
 ---
 
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| Language | Python 3.10+ |
-| Database | Supabase (PostgreSQL) |
-| Data source | `nflreadpy` (NFL data API client) |
-| Data manipulation | `pandas`, `numpy`, `pyarrow` |
-| DB client | `supabase` Python SDK |
-| Config management | `python-dotenv` |
-
----
-
-## Repository Structure
-
-```
-prop-bet-prediction-site/
-├── .env                          # SUPABASE_URL + SUPABASE_KEY (never commit)
-├── requirements.txt              # pip dependencies
-├── run_initial_load.py           # thin wrapper calling pipeline.initial_load.main()
-├── inspect_tables.py             # dev utility: generate CSV samples + inspect
-│
-├── db/
-│   └── client.py                 # Supabase singleton (reads env on import)
-│
-├── loaders/                      # One file per data feed — pure transforms only
-│   ├── schedule.py
-│   ├── weekly_player_stats.py
-│   ├── weekly_team_stats.py
-│   ├── play_by_play.py
-│   ├── formations.py
-│   ├── snap_counts.py
-│   ├── depth_chart.py
-│   ├── player_info.py
-│   ├── rosters.py
-│   ├── nextgen.py
-│   ├── pfr_adv_stats.py
-│   ├── fantasy_ids.py
-│   ├── fantasy_opportunities.py
-│   └── fantasy_rankings.py
-│
-├── pipeline/
-│   ├── config.py                 # CURRENT_SEASON, CURRENT_WEEK, TABLES registry
-│   ├── initial_load.py           # One-time historical backfill (all seasons)
-│   └── weekly_update.py          # Weekly cron job (Tuesdays)
-│
-├── sql/
-│   └── schema.sql                # CREATE TABLE + indexes — run once in Supabase
-│
-└── utils/
-    ├── upload.py                 # Generic upsert: NaN→None, batching, retry
-    └── validation.py             # Per-table sanity checks (required cols, dupes, ranges)
-```
-
----
-
-## Environment Setup
+## Quick Setup
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-cp .env.example .env
-# Edit .env with real credentials
+cp .env.example .env   # fill in SUPABASE_URL and SUPABASE_KEY
 ```
 
-**Required `.env` variables:**
-
-```
-SUPABASE_URL=https://<project>.supabase.co
-SUPABASE_KEY=<supabase-publishable-key>
-```
-
-`db/client.py` raises `EnvironmentError` at import time if either variable is missing.
-
----
-
-## Running the Pipeline
-
-### Initial backfill (run once)
-
-Pulls 2016 → present. Takes ~30–45 minutes.
+**Before pushing to Supabase**, sample and inspect the data locally:
 
 ```bash
-# All feeds
-python -m pipeline.initial_load
+# Pull 25 rows from every loader → schema_samples/
+python sample_schemas.py --season 2025
 
-# Specific feeds only
-python -m pipeline.initial_load --feeds schedule weekly_player_stats play_by_play
-```
-
-### Weekly update (every Tuesday)
-
-```bash
-# Use CURRENT_SEASON + CURRENT_WEEK from pipeline/config.py
-python -m pipeline.weekly_update
-
-# Override season/week
-python -m pipeline.weekly_update --season 2025 --week 4
-
-# Re-run specific feeds
-python -m pipeline.weekly_update --feeds snap_counts pfr_adv_stats
-```
-
-### Crontab (10am ET every Tuesday)
-
-```
-0 10 * * 2 cd /path/to/nfl-pipeline && /path/to/.venv/bin/python -m pipeline.weekly_update >> logs/weekly.log 2>&1
-```
-
-### Dev utilities
-
-```bash
-# Generate CSV samples for a season (writes to samples/)
+# Full 1000-row dump + terminal inspection report
 python inspect_tables.py --generate --season 2025
 
-# Inspect existing CSV samples (columns, nulls, dtypes, dupes, numeric summary)
-python inspect_tables.py --rows 10
+# Inspect specific tables only
+python inspect_tables.py --generate --season 2025 --tables weekly_player_data snap_count
 ```
 
 ---
 
-## Configuration (`pipeline/config.py`)
+## Data Scripts — What Each One Does
 
-**Update these before each season or weekly run:**
+Datasets are split into two strategies:
 
-```python
-CURRENT_SEASON = 2025
-CURRENT_WEEK   = 4    # ← bump every Tuesday after games complete
-```
-
-**`TABLES` registry** maps logical feed names to Supabase config:
-
-```python
-TABLES = {
-    "schedule": {
-        "table":    "sched_final",      # Supabase table name
-        "conflict": ["team", "game_id"],# Upsert conflict key columns
-        "strategy": "weekly",           # "weekly" or "snapshot"
-    },
-    ...
-}
-```
-
-- `"weekly"` strategy: append/upsert new rows each run
-- `"snapshot"` strategy: full replace each run (player_info, depth_chart, fantasy_ids, fantasy_rankings)
-
-**Upload settings:**
-- `BATCH_SIZE = 500` — rows per Supabase upsert call
-- `MAX_RETRIES = 3` — retry attempts on failed batches
+- **Weekly** — append/upsert each run (new rows per game)
+- **Snapshot** — full replace each run (latest state wins)
 
 ---
 
-## Architecture: Data Flow
+### Foundation Tables *(snapshot)*
 
-```
-nflreadpy API
-      │
-      ▼
-loaders/<feed>.py         # fetch + transform → returns pd.DataFrame
-      │
-      ▼
-utils/validation.py       # per-table QA: required cols, no dupes, range checks
-      │
-      ▼
-utils/upload.py           # NaN→None, batch 500 rows, upsert with retry
-      │
-      ▼
-Supabase (PostgreSQL)
-```
-
-### Loader interface contract
-
-Every loader exposes a single public function:
-
-- **Weekly feeds**: `load(seasons: list[int]) -> pd.DataFrame`
-- **Snapshot feeds**: `load() -> pd.DataFrame` (no season argument)
-
-Loaders do **only** transformation — no DB calls, no side effects. They must return a clean `pd.DataFrame` ready for validation and upsert.
+These are static lookup tables. Run first. Everything else joins through them.
 
 ---
 
-## Loader Conventions
+#### `loaders/player_info.py` → `player_info`
+**One row per player (`gsis_id`)**
 
-1. **One file per feed** in `loaders/`. Do not combine unrelated feeds.
-2. **No DB calls inside loaders.** All Supabase interaction goes through `utils/upload.py`.
-3. **Column naming**: use `snake_case`. Prefix columns by source when needed (e.g., `pbp_`, `ng_`, `opps_`, `pfr_`).
-4. **Drop unused columns early.** Prefer explicit `keep_cols` lists or drop irrelevant columns near the top of the transform.
-5. **Deduplication**: when a feed may return duplicate rows, deduplicate explicitly (keep last) before returning.
-6. **NaN handling**: `utils/upload.py` converts all `NaN` to `None` automatically — loaders don't need to do this.
-7. **Type coercion**: don't force dtypes unnecessarily; let pandas infer. IDs (gsis_id, game_id) must remain `TEXT`/`str` — never cast to int.
+Bio data: height, weight, college, draft round/pick, position mappings across systems (NGS, PFF). The `pfr_id` column here bridges to `snap_count` and `pfr_adv_stats` if you don't want to go through `fantasy_ids`.
+
+**Joins to:** every table via `gsis_id`
+**Model use:** position group filtering, physical attributes as baseline features
 
 ---
 
-## Adding a New Feed
+#### `loaders/fantasy_ids.py` → `fantasy_football_ids`
+**One row per `pfr_player_id`**
 
-Follow these four steps in order:
-
-1. **Create `loaders/my_feed.py`** with a `load(seasons)` or `load()` function returning a `pd.DataFrame`.
-
-2. **Register in `pipeline/config.py`**:
-   ```python
-   "my_feed": {
-       "table":    "my_supabase_table",
-       "conflict": ["primary_key_col"],
-       "strategy": "weekly",  # or "snapshot"
-   },
-   ```
-
-3. **Add a `case` in both `pipeline/initial_load.py` and `pipeline/weekly_update.py`**:
-   ```python
-   elif name == "my_feed":
-       df = my_feed.load(seasons)
-   ```
-
-4. **Add validation rules in `utils/validation.py`** — at minimum specify required columns and the no-null key columns.
-
-5. **Add the Supabase table in `sql/schema.sql`** with the appropriate composite UNIQUE constraint matching your conflict columns.
-
----
-
-## Database Schema Conventions
-
-- **All ID columns** (gsis_id, game_id, pfr_player_id) are `TEXT` — never cast to integer.
-- **Float columns** use `DOUBLE PRECISION` to match pandas `float64`.
-- **Every table** has a composite `UNIQUE` constraint on the same columns listed in `TABLES[feed]["conflict"]`.
-- **No foreign key constraints** in the DB — referential integrity is enforced at the pipeline layer.
-- **Indexes** are defined on common join/filter columns: gsis_id, game_id, pfr_player_id, team+season.
-- Schema is initialized once by pasting `sql/schema.sql` into the Supabase SQL editor.
-
----
-
-## Key Table Reference
-
-| Supabase Table | Conflict Key | Strategy | Feed Name |
-|---|---|---|---|
-| `player_info` | `gsis_id` | snapshot | `player_info` |
-| `depth_chart` | `gsis_id` | snapshot | `depth_chart` |
-| `fantasy_football_ids` | `pfr_player_id` | snapshot | `fantasy_ids` |
-| `fantasy_football_rankings` | `mergename, pos, team, page_type` | snapshot | `fantasy_rankings` |
-| `rosters` | `gsis_id, season, week` | weekly | `rosters` |
-| `sched_final` | `team, game_id` | weekly | `schedule` |
-| `weekly_player_data` | `gsis_id, game_id` | weekly | `weekly_player_stats` |
-| `weekly_team_data` | `team, game_id` | weekly | `weekly_team_stats` |
-| `snap_count` | `pfr_player_id, game_id` | weekly | `snap_counts` |
-| `nextgen` | `gsis_id, season, week` | weekly | `nextgen` |
-| `pro_football_ref_adv_stats` | `pfr_player_id, game_id` | weekly | `pfr_adv_stats` |
-| `fantasy_football_opportunities` | `gsis_id, game_id` | weekly | `fantasy_opportunities` |
-| `play_by_play` | `gsis_id, game_id` | weekly | `play_by_play` |
-| `play_by_play_formations` | `gsis_id, game_id` | weekly | `formations` |
-
----
-
-## Key Joins
-
-`snap_count` uses `pfr_player_id` as its primary key. Bridge to `gsis_id` via `fantasy_football_ids`:
+The critical ID bridge table. `snap_count` and `pfr_adv_stats` use `pfr_player_id` as their key (sourced from Pro Football Reference), not `gsis_id`. This table maps `pfr_player_id → gsis_id` so you can join those feeds to everything else.
 
 ```sql
+-- Always join snap_count through here
 SELECT s.*, i.gsis_id
 FROM snap_count s
 JOIN fantasy_football_ids i ON s.pfr_player_id = i.pfr_player_id;
 ```
 
-Full player game profile:
+**Joins to:** `snap_count`, `pro_football_ref_adv_stats`
+**Model use:** not a model feature — purely a join key resolver
 
-```sql
-SELECT p.*, w.*, sc.offense_pct, f.form_shotgun_pct
-FROM weekly_player_data p
-JOIN sched_final sc_g ON p.game_id = sc_g.game_id AND p.team = sc_g.team
-JOIN weekly_team_data w ON p.game_id = w.game_id AND p.team = w.team
-JOIN snap_count sc ON p.game_id = sc.game_id
-JOIN fantasy_football_ids fi ON sc.pfr_player_id = fi.pfr_player_id AND fi.gsis_id = p.gsis_id
-JOIN play_by_play_formations f ON p.game_id = f.game_id AND p.gsis_id = f.gsis_id;
+---
+
+#### `loaders/depth_chart.py` → `depth_chart`
+**One row per player — latest depth chart date only**
+
+Current depth chart position and ranking. Re-fetched every run (charts change weekly). Only the most recent date is kept; historical depth chart data is not stored.
+
+**Joins to:** `player_info` via `gsis_id`
+**Model use:** position rank as a proxy for role security; useful for filtering out backups
+
+---
+
+### Game Context *(weekly)*
+
+---
+
+#### `loaders/schedule.py` → `sched_final`
+**One row per team per game (`team + game_id`)**
+
+Reshaped from a game-level record into two team-level rows (home + away). Contains game context that isn't in the player stat feeds: spread, moneyline, rest days, coach, weather (temp/wind), roof type, surface, referee, and stadium.
+
+**Joins to:** all weekly tables via `game_id`; filtered to team with `team` column
+**Model use:** spread and moneyline encode market expectations; rest days and weather affect scoring environments; home/away splits for travel fatigue
+
+---
+
+### Core Stat Tables *(weekly)*
+
+---
+
+#### `loaders/weekly_player_stats.py` → `weekly_player_data`
+**One row per player per game (`gsis_id + game_id`)**
+
+The primary output table. Standard box score stats for QB/RB/WR/TE/DB/DL/LB. Kickers excluded. Adds a computed `total_tds` column (passing + rushing + receiving TDs combined). Fantasy points columns are intentionally dropped — compute those in the model layer.
+
+**Joins to:** `sched_final` via `game_id + team`, all enrichment tables via `gsis_id + game_id`
+**Model use:** contains all prediction targets — `passing_yards`, `rushing_yards`, `receiving_yards`, `total_tds`, `receptions`
+
+---
+
+#### `loaders/weekly_team_stats.py` → `weekly_team_data`
+**One row per team per game (`team + game_id`)**
+
+Aggregated offensive and defensive team-level stats. Granular FG distance breakdowns are dropped (noise). Use this for game script context: pass rate, total yards, pace.
+
+**Joins to:** `weekly_player_data` via `game_id + team`; `sched_final` via same
+**Model use:** team pass rate and total offensive efficiency are strong predictors for individual player targets and carries
+
+---
+
+#### `loaders/rosters.py` → `rosters`
+**One row per player per week (`gsis_id + season + week`)**
+
+Weekly roster status: active, IR, practice squad, etc. Deduped to keep the latest entry per player per week (captures mid-week transactions). Useful for filtering out injured or inactive players before prediction.
+
+**Joins to:** `weekly_player_data` via `gsis_id + season + week`
+**Model use:** status filtering is essential — never predict for players on IR or inactive
+
+---
+
+### Play-Level Enrichment *(weekly)*
+
+These feeds add efficiency and usage context that box scores don't capture.
+
+---
+
+#### `loaders/snap_counts.py` → `snap_count`
+**One row per player per game (`pfr_player_id + game_id`)**
+
+Offense, defense, and special teams snap counts and percentages from Pro Football Reference. Uses `pfr_player_id` not `gsis_id` — always join through `fantasy_football_ids`.
+
+**Joins to:** `fantasy_football_ids` via `pfr_player_id` → then to everything else via `gsis_id`
+**Model use:** `offense_pct` is the single strongest usage signal for skill position players — more reliable than target share alone
+
+---
+
+#### `loaders/play_by_play.py` → `play_by_play`
+**One row per player per game (`gsis_id + game_id`)**
+
+Raw PBP data aggregated to player-game level across three roles: passer, rusher, receiver. A QB who also rushes gets one merged row with both passing and rushing columns populated. Columns prefixed `pbp_`.
+
+Key metrics: EPA totals, CPOE, xPass, air yards thrown vs caught, YAC, red zone dropbacks/carries/targets, shotgun snaps, sacks.
+
+**Joins to:** `weekly_player_data` via `gsis_id + game_id`
+**Model use:** EPA and CPOE are better efficiency signals than raw yards; red zone usage predicts TD variance; shotgun snaps cross-check with `formations`
+
+---
+
+#### `loaders/formations.py` → `play_by_play_formations`
+**One row per player per game (`gsis_id + game_id`)**
+
+Offensive formation usage per player per game, aggregated from participation data. Every offensive player on the field gets counted. Columns prefixed `form_`.
+
+Key metrics: `form_shotgun_pct`, `form_under_center_pct`, `form_empty_back_pct`, `form_pressure_rate`, `form_avg_time_to_throw`, `form_avg_defenders_box`.
+
+**Joins to:** `weekly_player_data` via `gsis_id + game_id`; consistent with `play_by_play` shotgun snap counts
+**Model use:** shotgun rate predicts passing volume and WR/TE opportunity; defenders in box predicts run/pass split; pressure rate affects QB accuracy
+
+---
+
+### Advanced Metrics *(weekly)*
+
+Higher-signal features for the prediction model.
+
+---
+
+#### `loaders/nextgen.py` → `nextgen`
+**One row per player per week (`gsis_id + season + week`)**
+
+AWS Next Gen Stats tracking data. Three stat types (passing, rushing, receiving) merged into one wide row per player per week. Columns prefixed `ng_pass_`, `ng_rush_`, `ng_rec_`.
+
+Key metrics by role:
+- **QB:** time to throw, completion % above expectation (CPAE), aggressiveness, intended air yards
+- **RB:** rush yards over expected (RYOE), efficiency, time to line of scrimmage
+- **WR/TE:** cushion, separation, intended air yards share, YAC above expectation
+
+Note: grain is week-level (not game-level) — joins on `gsis_id + season + week`, not `game_id`.
+
+**Joins to:** `weekly_player_data` via `gsis_id + season + week`
+**Model use:** CPAE and separation are strong independent predictors; RYOE separates scheme from player; intended air yards share shows target quality
+
+---
+
+#### `loaders/pfr_adv_stats.py` → `pro_football_ref_adv_stats`
+**One row per player per game (`pfr_player_id + game_id`)**
+
+Pro Football Reference advanced stats across four groups (pass, rush, rec, def), merged into one wide row. Columns prefixed `pfr_pass_`, `pfr_rush_`, `pfr_rec_`, `pfr_def_`. Uses `pfr_player_id` — join through `fantasy_football_ids` to reach `gsis_id`.
+
+Key metrics:
+- **QB:** pressure rate, bad throw %, drop %, times blitzed/hurried/hit
+- **RB:** yards before/after contact, broken tackles
+- **WR/TE:** drops, passer rating when targeted, broken tackles after catch
+- **DEF:** coverage metrics, missed tackle %, pressure contributions
+
+**Joins to:** `fantasy_football_ids` via `pfr_player_id`; then `weekly_player_data` via `gsis_id + game_id`
+**Model use:** pressure rate is essential for QB projections; passer rating when targeted identifies favorable matchups; broken tackles explain YAC variance
+
+---
+
+#### `loaders/fantasy_opportunities.py` → `fantasy_football_opportunities`
+**One row per player per game (`gsis_id + game_id`)**
+
+Vegas-calibrated opportunity model — expected vs actual fantasy points for every player every game. All stat columns prefixed `opps_`. The `opps_*_fantasy_points_exp` columns are the model's pre-game opportunity estimate; `opps_*_diff` shows how much a player over/underperformed.
+
+**Joins to:** `weekly_player_data` via `gsis_id + game_id`
+**Model use:** the most directly actionable pre-game feature — expected points encode matchup quality, game script, and usage all at once; tracking diff over time identifies systematic over/underperformers
+
+---
+
+### Market Signals *(snapshot)*
+
+---
+
+#### `loaders/fantasy_rankings.py` → `fantasy_football_rankings`
+**One row per player per position per team per page_type**
+
+FantasyPros expert consensus rankings (ECR). The `page_type` column distinguishes contexts:
+- `"weekly"` — start/sit rankings for the current week ← use this for betting models
+- `"ros"` — rest-of-season outlook
+- `"draft"` — pre-season ADP
+
+Columns prefixed `rank_`. Includes ECR rank, standard deviation (consensus spread), best/worst case, week-over-week delta, and platform ownership rates.
+
+No `gsis_id` — joins via `mergename + pos + team` (fuzzy). Use only for market signal features, not as a primary join key.
+
+**Joins to:** loosely to `weekly_player_data` via name/team matching
+**Model use:** rank delta (week-over-week movement) as momentum signal; ownership rates signal public bias; ECR consensus as a baseline to bet against or with
+
+---
+
+## How Tables Fit Together
+
+```
+player_info ──────────────────────────────────────┐
+fantasy_football_ids (pfr_player_id → gsis_id) ───┤
+depth_chart ───────────────────────────────────────┤
+                                                    │ gsis_id
+rosters ──────────── gsis_id + season + week       │
+                                                    ▼
+sched_final ──────── team + game_id ──────► weekly_player_data  (core target table)
+weekly_team_data ─── team + game_id ──────►        │
+                                                    │ gsis_id + game_id
+play_by_play ────────────────────────────────────── ┤
+play_by_play_formations ─────────────────────────── ┤
+fantasy_football_opportunities ──────────────────── ┘
+
+snap_count ─── pfr_player_id + game_id ── (bridge via fantasy_football_ids)
+pro_football_ref_adv_stats ── pfr_player_id + game_id ── (bridge via fantasy_football_ids)
+
+nextgen ────── gsis_id + season + week  (no game_id — week-level grain)
 ```
 
 ---
 
-## Upsert / Upload Behavior (`utils/upload.py`)
+## Debugging Before Supabase
 
-- All `NaN` values are converted to `None` (PostgreSQL `NULL`) before upload.
-- Rows are sent in batches of `BATCH_SIZE` (500).
-- On failure, retries up to `MAX_RETRIES` (3) with exponential backoff (`2^attempt` seconds).
-- Uses Supabase `upsert(..., on_conflict=<conflict_cols>)` — existing rows are updated, new rows are inserted.
+**Step 1 — Sample the data locally**
+```bash
+python sample_schemas.py --season 2025 --rows 25
+# Writes schema_samples/<table>.csv + schema_overview.csv + column_overlap.csv
+```
 
----
+**Step 2 — Inspect for data quality issues**
+```bash
+python inspect_tables.py --generate --season 2025
+# Checks: duplicate conflict keys, null%, dtype, numeric ranges
+```
 
-## Validation Rules (`utils/validation.py`)
+**Step 3 — Run a specific feed end-to-end**
+```bash
+python -m pipeline.weekly_update --season 2025 --week 4 --feeds snap_counts
+```
 
-Per-table rules in `TABLE_RULES` dict. Each entry can specify:
-- `required_cols`: columns that must exist in the DataFrame
-- `no_null_cols`: columns where nulls trigger a critical error
-- `dedup_cols`: deduplicate on these columns (keep last)
-- `range_checks`: `{col: (min, max)}` for sanity bounds
+**Common issues:**
 
-Warnings are logged. Critical failures raise an exception and halt the feed.
-
----
-
-## Modeling Context (for prediction features)
-
-**Target variables** (all in `weekly_player_data`):
-- `passing_yards`, `rushing_yards`, `receiving_yards`
-- `total_tds` (passing + rushing + receiving TDs, added as computed column in loader)
-- `receptions`
-
-**Key predictive features:**
-- `opps_*_fantasy_points_exp` — opportunity model (expected fantasy points)
-- `offense_pct` — snap share from `snap_count`
-- `form_shotgun_pct` — formation usage from `play_by_play_formations`
-- `pfr_times_pressured_pct` — pressure rate from `pro_football_ref_adv_stats`
-- `ng_completion_percentage_above_expectation` — AWS tracking from `nextgen`
-
-**Recommended modeling approach:**
-- Ridge regression or XGBoost on rolling 4-week windows
-- Poisson regression for TD counts
-- Bet sizing: Kelly Criterion with 0.25 fractional Kelly cap
+| Problem | Cause | Fix |
+|---|---|---|
+| Upsert fails with column error | Loader added a column not in `schema.sql` | `ALTER TABLE` in Supabase or update `schema.sql` |
+| Duplicate key violation | Conflict columns don't uniquely identify rows | Check `dedup_cols` in `utils/validation.py` |
+| `snap_count` won't join | Uses `pfr_player_id`, not `gsis_id` | Bridge through `fantasy_football_ids` |
+| `nextgen` won't join on `game_id` | Its grain is week-level, not game-level | Join on `gsis_id + season + week` instead |
+| Loader returns empty DataFrame | nflreadpy season filter too narrow | Check `CURRENT_SEASON` and `CURRENT_WEEK` in `pipeline/config.py` |
+| EnvironmentError on import | `.env` missing or incomplete | Verify `SUPABASE_URL` and `SUPABASE_KEY` are set |
 
 ---
 
-## Git Workflow
+## Configuration
 
-- **Active development branch**: `claude/add-claude-documentation-BhgB1`
-- Push with: `git push -u origin <branch-name>`
-- Commit messages should be concise and describe the "why" of changes.
+Edit `pipeline/config.py` before each run:
+
+```python
+CURRENT_SEASON = 2025
+CURRENT_WEEK   = 4     # bump every Tuesday after games complete
+
+HISTORICAL_SEASONS = []  # set to list(range(2016, 2025)) for backfill
+```
+
+**Upload defaults:** `BATCH_SIZE = 500` rows per upsert, `MAX_RETRIES = 3` with exponential backoff.
 
 ---
 
-## Common Gotchas
+## Adding a New Feed
 
-1. **`CURRENT_WEEK` must be updated manually** in `pipeline/config.py` each Tuesday before the cron job runs. The pipeline does not auto-detect the current week.
+1. Create `loaders/my_feed.py` — return a clean `pd.DataFrame` from `load(seasons)` or `load()`
+2. Register it in `pipeline/config.py` under `TABLES` with table name, conflict columns, and strategy
+3. Add a dispatch case in both `pipeline/initial_load.py` and `pipeline/weekly_update.py`
+4. Add validation rules in `utils/validation.py`
+5. Add the table + UNIQUE constraint to `sql/schema.sql`
 
-2. **`HISTORICAL_SEASONS` is currently empty** (`[]`). To run a historical backfill, populate it (e.g., `list(range(2016, 2025))`).
-
-3. **`snap_count` joins via `pfr_player_id`**, not `gsis_id`. Always bridge through `fantasy_football_ids` when joining snap data to other tables.
-
-4. **nflreadpy may return extra/fewer columns** than expected between package updates. Loaders should be robust to this — use explicit column selection rather than relying on positional access.
-
-5. **Supabase upsert requires exact column match.** If you add columns to a loader, you must also add them to `sql/schema.sql` and re-run the schema (or `ALTER TABLE`). The upsert will fail if the DataFrame contains columns that don't exist in the DB table.
-
-6. **The `.env` file contains real credentials** and must never be committed. It is correctly gitignored via `.gitignore`.
-
-7. **`fantasy_football_rankings` page_type matters.** The value `"weekly"` is the most useful for prop betting (weekly expert consensus). `"ros"` and `"draft"` are rest-of-season and draft-day rankings.
-
-8. **No test suite exists.** Use `inspect_tables.py` for manual data quality checks before and after pipeline changes.
+If the Supabase table doesn't have a column that the loader returns, the upsert will fail. Always run `sample_schemas.py` and check `schema_overview.csv` before the first upload.
