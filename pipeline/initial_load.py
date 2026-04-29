@@ -10,8 +10,8 @@ Usage:
     # Or a single feed only:
     python -m pipeline.initial_load --feeds schedule weekly_player_stats
 
-Feeds that are season-agnostic (player_info, depth_chart, fantasy_ids,
-fantasy_rankings, nextgen, pfr_adv_stats, snap_counts) are loaded in
+Feeds that are season-agnostic (player_info, fantasy_ids,
+nextgen, pfr_adv_stats, snap_counts) are loaded in
 full regardless of season filter.
 
 Estimated runtime: 20–45 min depending on season range and Supabase tier.
@@ -31,14 +31,11 @@ import loaders.weekly_team_stats      as weekly_team_loader
 import loaders.play_by_play           as pbp_loader
 import loaders.formations             as formations_loader
 import loaders.snap_counts            as snap_loader
-import loaders.depth_chart            as depth_chart_loader
 import loaders.player_info            as player_info_loader
 import loaders.rosters                as rosters_loader
 import loaders.nextgen                as nextgen_loader
 import loaders.pfr_adv_stats          as pfr_loader
 import loaders.fantasy_ids            as fantasy_ids_loader
-import loaders.fantasy_opportunities  as opps_loader
-import loaders.fantasy_rankings       as rankings_loader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,22 +82,16 @@ def _load(feed_name: str, seasons: list[int]):
             return snap_loader.load(seasons)
         case "rosters":
             return rosters_loader.load(seasons)
-        case "fantasy_opportunities":
-            return opps_loader.load(seasons)
         case "nextgen":
             return nextgen_loader.load(seasons)
 
         # ── Snapshot feeds (season param ignored) ────────────────────────────
         case "player_info":
             return player_info_loader.load()
-        case "depth_chart":
-            return depth_chart_loader.load()
         case "pfr_adv_stats":
             return pfr_loader.load()
         case "fantasy_ids":
             return fantasy_ids_loader.load()
-        case "fantasy_rankings":
-            return rankings_loader.load()
 
         case _:
             raise ValueError(f"Unknown feed: '{feed_name}'")
@@ -112,7 +103,6 @@ def _load(feed_name: str, seasons: list[int]):
 _DEFAULT_ORDER = [
     "player_info",
     "fantasy_ids",
-    # "depth_chart",
     "rosters",
     "schedule",
     "weekly_player_stats",
@@ -120,8 +110,6 @@ _DEFAULT_ORDER = [
     "snap_counts",
     "pfr_adv_stats",
     "nextgen",
-    # "fantasy_opportunities",
-    # "fantasy_rankings",
     "play_by_play",
     "formations",
 ]

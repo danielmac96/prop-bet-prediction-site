@@ -45,14 +45,29 @@ TABLE_RULES: Dict[str, Dict[str, Any]] = {
         "no_dupes_on":   ["gsis_id", "season", "week"],
         "range_checks":  {"ng_completion_percentage": (0, 100)},
     },
-    "fantasy_opportunities": {
+    "rosters": {
+        "required_cols": ["gsis_id", "season", "week"],
+        "no_dupes_on":   ["gsis_id", "season", "week"],
+        "range_checks":  {},
+    },
+    "formations": {
         "required_cols": ["gsis_id", "game_id"],
         "no_dupes_on":   ["gsis_id", "game_id"],
         "range_checks":  {},
     },
-    "rosters": {
-        "required_cols": ["gsis_id", "season", "week"],
-        "no_dupes_on":   ["gsis_id", "season", "week"],
+    "pfr_adv_stats": {
+        "required_cols": ["pfr_player_id", "game_id"],
+        "no_dupes_on":   ["pfr_player_id", "game_id"],
+        "range_checks":  {},
+    },
+    "player_info": {
+        "required_cols": ["gsis_id"],
+        "no_dupes_on":   ["gsis_id"],
+        "range_checks":  {},
+    },
+    "fantasy_ids": {
+        "required_cols": ["pfr_player_id", "gsis_id"],
+        "no_dupes_on":   ["pfr_player_id"],
         "range_checks":  {},
     },
 }

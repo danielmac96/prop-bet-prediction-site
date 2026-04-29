@@ -7,7 +7,7 @@
 --   - All text IDs (gsis_id, game_id) are TEXT — never cast to int
 --   - Floats use DOUBLE PRECISION (matches pandas float64)
 --   - Each table has a composite UNIQUE constraint matching config.TABLES conflict cols
---   - No foreign key constraints — enforce integrity in the pipeline layer
+--   - No foreign key constraints — enforce intgrity in the pipeline layer
 --   - Player metadata (name, position) lives only in player_info; join on gsis_id
 -- =============================================================================
 
@@ -30,16 +30,6 @@ CREATE TABLE IF NOT EXISTS public.player_info (
     years_of_experience     BIGINT,
     pff_position            TEXT,
     pfr_id                  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS public.depth_chart (
-    gsis_id         TEXT PRIMARY KEY,
-    dc_team         TEXT,
-    dc_pos_abb      TEXT,
-    dc_pos_slot     BIGINT,
-    dc_pos_rank     BIGINT,
-    dc_pos_name     TEXT,
-    dc_pos_grp      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.fantasy_football_ids (
@@ -459,111 +449,6 @@ CREATE TABLE IF NOT EXISTS public.pro_football_ref_adv_stats (
     UNIQUE (pfr_player_id, game_id)
 );
 
--- Fantasy opportunity model. One row per player per game.
--- Player name/position excluded — join to player_info on gsis_id.
-CREATE TABLE IF NOT EXISTS public.fantasy_football_opportunities (
-    gsis_id                         TEXT,
-    game_id                         TEXT,
-    season                          BIGINT,
-    week                            DOUBLE PRECISION,
-    team                            TEXT,
-    opps_pass_attempt               DOUBLE PRECISION,
-    opps_rec_attempt                DOUBLE PRECISION,
-    opps_rush_attempt               DOUBLE PRECISION,
-    opps_pass_air_yards             DOUBLE PRECISION,
-    opps_rec_air_yards              DOUBLE PRECISION,
-    opps_pass_completions           DOUBLE PRECISION,
-    opps_receptions                 DOUBLE PRECISION,
-    opps_pass_completions_exp       DOUBLE PRECISION,
-    opps_receptions_exp             DOUBLE PRECISION,
-    opps_pass_yards_gained          DOUBLE PRECISION,
-    opps_rec_yards_gained           DOUBLE PRECISION,
-    opps_rush_yards_gained          DOUBLE PRECISION,
-    opps_pass_yards_gained_exp      DOUBLE PRECISION,
-    opps_rec_yards_gained_exp       DOUBLE PRECISION,
-    opps_rush_yards_gained_exp      DOUBLE PRECISION,
-    opps_pass_touchdown             DOUBLE PRECISION,
-    opps_rec_touchdown              DOUBLE PRECISION,
-    opps_rush_touchdown             DOUBLE PRECISION,
-    opps_pass_touchdown_exp         DOUBLE PRECISION,
-    opps_rec_touchdown_exp          DOUBLE PRECISION,
-    opps_rush_touchdown_exp         DOUBLE PRECISION,
-    opps_pass_two_point_conv        DOUBLE PRECISION,
-    opps_rec_two_point_conv         DOUBLE PRECISION,
-    opps_rush_two_point_conv        DOUBLE PRECISION,
-    opps_pass_two_point_conv_exp    DOUBLE PRECISION,
-    opps_rec_two_point_conv_exp     DOUBLE PRECISION,
-    opps_rush_two_point_conv_exp    DOUBLE PRECISION,
-    opps_pass_first_down            DOUBLE PRECISION,
-    opps_rec_first_down             DOUBLE PRECISION,
-    opps_rush_first_down            DOUBLE PRECISION,
-    opps_pass_first_down_exp        DOUBLE PRECISION,
-    opps_rec_first_down_exp         DOUBLE PRECISION,
-    opps_rush_first_down_exp        DOUBLE PRECISION,
-    opps_pass_interception          DOUBLE PRECISION,
-    opps_rec_interception           DOUBLE PRECISION,
-    opps_pass_interception_exp      DOUBLE PRECISION,
-    opps_rec_interception_exp       DOUBLE PRECISION,
-    opps_rec_fumble_lost            DOUBLE PRECISION,
-    opps_rush_fumble_lost           DOUBLE PRECISION,
-    opps_pass_fantasy_points_exp    DOUBLE PRECISION,
-    opps_rec_fantasy_points_exp     DOUBLE PRECISION,
-    opps_rush_fantasy_points_exp    DOUBLE PRECISION,
-    opps_pass_fantasy_points        DOUBLE PRECISION,
-    opps_rec_fantasy_points         DOUBLE PRECISION,
-    opps_rush_fantasy_points        DOUBLE PRECISION,
-    opps_total_yards_gained         DOUBLE PRECISION,
-    opps_total_yards_gained_exp     DOUBLE PRECISION,
-    opps_total_touchdown            DOUBLE PRECISION,
-    opps_total_touchdown_exp        DOUBLE PRECISION,
-    opps_total_first_down           DOUBLE PRECISION,
-    opps_total_first_down_exp       DOUBLE PRECISION,
-    opps_total_fantasy_points       DOUBLE PRECISION,
-    opps_total_fantasy_points_exp   DOUBLE PRECISION,
-    opps_pass_completions_diff      DOUBLE PRECISION,
-    opps_receptions_diff            DOUBLE PRECISION,
-    opps_pass_yards_gained_diff     DOUBLE PRECISION,
-    opps_rec_yards_gained_diff      DOUBLE PRECISION,
-    opps_rush_yards_gained_diff     DOUBLE PRECISION,
-    opps_pass_touchdown_diff        DOUBLE PRECISION,
-    opps_rec_touchdown_diff         DOUBLE PRECISION,
-    opps_rush_touchdown_diff        DOUBLE PRECISION,
-    opps_pass_two_point_conv_diff   DOUBLE PRECISION,
-    opps_rec_two_point_conv_diff    DOUBLE PRECISION,
-    opps_rush_two_point_conv_diff   DOUBLE PRECISION,
-    opps_pass_first_down_diff       DOUBLE PRECISION,
-    opps_rec_first_down_diff        DOUBLE PRECISION,
-    opps_rush_first_down_diff       DOUBLE PRECISION,
-    opps_pass_interception_diff     DOUBLE PRECISION,
-    opps_rec_interception_diff      DOUBLE PRECISION,
-    opps_pass_fantasy_points_diff   DOUBLE PRECISION,
-    opps_rec_fantasy_points_diff    DOUBLE PRECISION,
-    opps_rush_fantasy_points_diff   DOUBLE PRECISION,
-    opps_total_yards_gained_diff    DOUBLE PRECISION,
-    opps_total_touchdown_diff       DOUBLE PRECISION,
-    opps_total_first_down_diff      DOUBLE PRECISION,
-    opps_total_fantasy_points_diff  DOUBLE PRECISION,
-    UNIQUE (gsis_id, game_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.fantasy_football_rankings (
-    mergename               TEXT,
-    pos                     TEXT,
-    team                    TEXT,
-    page_type               TEXT,
-    rank_ecr_type           TEXT,
-    rank_ecr                DOUBLE PRECISION,
-    rank_sd                 DOUBLE PRECISION,
-    rank_best               BIGINT,
-    rank_worst              BIGINT,
-    rank_rank_delta         DOUBLE PRECISION,
-    rank_bye                DOUBLE PRECISION,
-    rank_player_owned_avg   DOUBLE PRECISION,
-    rank_player_owned_espn  DOUBLE PRECISION,
-    rank_player_owned_yahoo DOUBLE PRECISION,
-    rank_scrape_date        TEXT,
-    UNIQUE (mergename, pos, team, page_type)
-);
 
 
 -- ── Indexes for common join / filter patterns ──────────────────────────────────
@@ -573,7 +458,6 @@ CREATE INDEX IF NOT EXISTS idx_weekly_player_gsis   ON public.weekly_player_data
 CREATE INDEX IF NOT EXISTS idx_weekly_player_season  ON public.weekly_player_data (season, week);
 CREATE INDEX IF NOT EXISTS idx_pbp_gsis              ON public.play_by_play (gsis_id);
 CREATE INDEX IF NOT EXISTS idx_formations_gsis       ON public.play_by_play_formations (gsis_id);
-CREATE INDEX IF NOT EXISTS idx_opps_gsis             ON public.fantasy_football_opportunities (gsis_id);
 CREATE INDEX IF NOT EXISTS idx_rosters_gsis          ON public.rosters (gsis_id);
 CREATE INDEX IF NOT EXISTS idx_nextgen_gsis          ON public.nextgen (gsis_id);
 

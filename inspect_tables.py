@@ -50,19 +50,9 @@ TABLE_REGISTRY = {
         "keys":     ["gsis_id"],
         "type":     "snapshot",
     },
-    "depth_chart": {
-        "csv":      "depth_chart.csv",
-        "keys":     ["gsis_id"],
-        "type":     "snapshot",
-    },
     "fantasy_football_ids": {
         "csv":      "fantasy_football_ids.csv",
         "keys":     ["pfr_player_id"],
-        "type":     "snapshot",
-    },
-    "fantasy_football_rankings": {
-        "csv":      "fantasy_football_rankings.csv",
-        "keys":     ["mergename", "pos", "team", "page_type"],
         "type":     "snapshot",
     },
     "nextgen": {
@@ -98,11 +88,6 @@ TABLE_REGISTRY = {
     "snap_count": {
         "csv":      "snap_count.csv",
         "keys":     ["pfr_player_id", "game_id"],
-        "type":     "seasonal",
-    },
-    "fantasy_football_opportunities": {
-        "csv":      "fantasy_football_opportunities.csv",
-        "keys":     ["gsis_id", "game_id"],
         "type":     "seasonal",
     },
     "play_by_play": {
@@ -143,14 +128,11 @@ def _run_loader(name: str, seasons: list) -> pd.DataFrame:
     import loaders.play_by_play           as pbp_loader
     import loaders.formations             as formations_loader
     import loaders.snap_counts            as snap_loader
-    import loaders.depth_chart            as depth_chart_loader
     import loaders.player_info            as player_info_loader
     import loaders.rosters                as rosters_loader
     import loaders.nextgen                as nextgen_loader
     import loaders.pfr_adv_stats          as pfr_loader
     import loaders.fantasy_ids            as fantasy_ids_loader
-    import loaders.fantasy_opportunities  as opps_loader
-    import loaders.fantasy_rankings       as rankings_loader
 
     if   name == "sched_final":                    return schedule_loader.load(seasons)
     elif name == "weekly_player_data":             return weekly_player_loader.load(seasons)
@@ -159,13 +141,10 @@ def _run_loader(name: str, seasons: list) -> pd.DataFrame:
     elif name == "play_by_play_formations":        return formations_loader.load(seasons)
     elif name == "snap_count":                     return snap_loader.load(seasons)
     elif name == "rosters":                        return rosters_loader.load(seasons)
-    elif name == "fantasy_football_opportunities": return opps_loader.load(seasons)
-    elif name == "player_info":                    return player_info_loader.load()
-    elif name == "depth_chart":                    return depth_chart_loader.load()
-    elif name == "nextgen":                        return nextgen_loader.load()
-    elif name == "pro_football_ref_adv_stats":     return pfr_loader.load()
-    elif name == "fantasy_football_ids":           return fantasy_ids_loader.load()
-    elif name == "fantasy_football_rankings":      return rankings_loader.load()
+    elif name == "player_info":                return player_info_loader.load()
+    elif name == "nextgen":                    return nextgen_loader.load()
+    elif name == "pro_football_ref_adv_stats": return pfr_loader.load()
+    elif name == "fantasy_football_ids":       return fantasy_ids_loader.load()
     else:
         raise ValueError(f"No loader mapped for '{name}'")
 

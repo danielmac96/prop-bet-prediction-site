@@ -27,7 +27,7 @@ import argparse
 import logging
 import sys
 
-from config import CURRENT_SEASON, CURRENT_WEEK, TABLES
+from pipeline.config import CURRENT_SEASON, CURRENT_WEEK, TABLES
 from pipeline.initial_load import run_feed   # reuse the same feed router
 from utils.upload import upsert
 from utils.validation import validate
@@ -38,14 +38,11 @@ import loaders.weekly_team_stats      as weekly_team_loader
 import loaders.play_by_play           as pbp_loader
 import loaders.formations             as formations_loader
 import loaders.snap_counts            as snap_loader
-import loaders.depth_chart            as depth_chart_loader
 import loaders.player_info            as player_info_loader
 import loaders.rosters                as rosters_loader
 import loaders.nextgen                as nextgen_loader
 import loaders.pfr_adv_stats          as pfr_loader
 import loaders.fantasy_ids            as fantasy_ids_loader
-import loaders.fantasy_opportunities  as opps_loader
-import loaders.fantasy_rankings       as rankings_loader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,8 +58,6 @@ logger = logging.getLogger(__name__)
 _WEEKLY_FEEDS = [
     ("player_info",           "snapshot"),
     ("fantasy_ids",           "snapshot"),
-    # ("depth_chart",           "snapshot"),
-    # ("fantasy_rankings",      "snapshot"),
     ("rosters",               "season"),
     ("schedule",              "season"),
     ("weekly_player_stats",   "season"),
@@ -70,7 +65,6 @@ _WEEKLY_FEEDS = [
     ("snap_counts",           "season"),
     ("pfr_adv_stats",         "snapshot"),  # load_pfr_advstats has no season filter
     ("nextgen",               "snapshot"),  # same
-    # ("fantasy_opportunities", "season"),
     ("play_by_play",          "season"),    # heaviest — run last
     ("formations",            "season"),
 ]
@@ -112,17 +106,11 @@ def _load_for_week(feed_name: str, season: int, week: int):
             df = rosters_loader.load([season])
             return df[df["week"] == week]
 
-        case "fantasy_opportunities":
-            df = opps_loader.load([season])
-            return df[df["week"] == week] if "week" in df.columns else df
-
         # ── Snapshot feeds ───────────────────────────────────────────────────
-        case "player_info":      return player_info_loader.load()
-        case "depth_chart":      return depth_chart_loader.load()
-        case "nextgen":          return nextgen_loader.load()
-        case "pfr_adv_stats":    return pfr_loader.load()
-        case "fantasy_ids":      return fantasy_ids_loader.load()
-        case "fantasy_rankings": return rankings_loader.load()
+        case "player_info":   return player_info_loader.load()
+        case "nextgen":       return nextgen_loader.load([season])
+        case "pfr_adv_stats": return pfr_loader.load()
+        case "fantasy_ids":   return fantasy_ids_loader.load()
 
         case _:
             raise ValueError(f"Unknown feed: '{feed_name}'")

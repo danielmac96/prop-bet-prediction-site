@@ -54,11 +54,6 @@ TABLES = {
         "conflict": ["pfr_player_id", "game_id"],
         "strategy": "weekly",
     },
-    "fantasy_opportunities": {
-        "table":    "fantasy_football_opportunities",
-        "conflict": ["gsis_id", "game_id"],
-        "strategy": "weekly",
-    },
     "rosters": {
         "table":    "rosters",
         "conflict": ["gsis_id", "season", "week"],
@@ -70,19 +65,9 @@ TABLES = {
         "conflict": ["gsis_id"],
         "strategy": "snapshot",
     },
-    "depth_chart": {
-        "table":    "depth_chart",
-        "conflict": ["gsis_id"],
-        "strategy": "snapshot",
-    },
     "fantasy_ids": {
         "table":    "fantasy_football_ids",
         "conflict": ["pfr_player_id"],
-        "strategy": "snapshot",
-    },
-    "fantasy_rankings": {
-        "table":    "fantasy_football_rankings",
-        "conflict": ["mergename", "pos", "team", "page_type"],
         "strategy": "snapshot",
     },
 }
