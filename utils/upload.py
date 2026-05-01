@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def _to_records(df: pd.DataFrame) -> List[dict]:
-    """Convert DataFrame to list of dicts, replacing NaN with None."""
+    """Convert DataFrame to list of dicts. NaN/NaT -> None; datetime columns -> ISO 8601."""
+    df = df.copy()
+    for col in df.select_dtypes(include=["datetime", "datetimetz"]).columns:
+        df[col] = df[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
     return df.astype(object).where(pd.notnull(df), None).to_dict(orient="records")
 
 

@@ -37,6 +37,11 @@ import loaders.nextgen                as nextgen_loader
 import loaders.pfr_adv_stats          as pfr_loader
 import loaders.fantasy_ids            as fantasy_ids_loader
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
